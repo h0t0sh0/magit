@@ -107,10 +107,12 @@ Contributors
 - Daniel Hackney <dan@haxney.org>
 - Daniel Kraus <daniel@kraus.my>
 - Daniel Mai <daniel@danielmai.net>
+- Daniel Martín <mardani29@yahoo.es>
 - Dan LaManna <dan.lamanna@gmail.com>
 - Danny Zhu <dzhu@dzhu.us>
 - Dato Simó <dato@net.com.org.es>
 - David Abrahams <dave@boostpro.com>
+- David Ellison <davidehellison@gmail.com>
 - David Ellison <davide@voicebox.com>
 - David Hull <david.hull@openx.com>
 - David L. Rager <ragerdl@gmail.com>
@@ -146,6 +148,7 @@ Contributors
 - Guillaume Martres <smarter@ubuntu.com>
 - Hannu Koivisto <azure@iki.fi>
 - Hans-Peter Deifel <hpdeifel@gmx.de>
+- Hussein Ait-Lahcen <hussein.ait-lahcen@fretlink.com>
 - Ian Eure <ian.eure@gmail.com>
 - Ingo Lohmar <i.lohmar@gmail.com>
 - Ioan-Adrian Ratiu <adi@adirat.com>
@@ -158,16 +161,19 @@ Contributors
 - Jesse Alama <jesse.alama@gmail.com>
 - Jim Blandy <jimb@red-bean.com>
 - Joakim Jalap <JOJA@stoneridge.com>
+- Johannes Altmanninger <aclopte@gmail.com>
 - Johann Klähn <kljohann@gmail.com>
 - John Mastro <john.b.mastro@gmail.com>
 - John Morris <john@zultron.com>
 - John Wiegley <johnw@newartisans.com>
 - Jonas Bernoulli <jonas@bernoul.li>
+- Jonathan Arnett <jonathan@scriptdrop.co>
 - Jonathan Leech-Pepin <jonathan.leechpepin@gmail.com>
 - Jonathan Roes <jroes@jroes.net>
 - Jon Vanderwijk <jonathn@github.com>
 - Jordan Galby <gravemind2a@gmail.com>
 - Jordan Greenberg <jordan@softwareslave.com>
+- Josh Elsasser <jelsasser@appneta.com>
 - Josiah Schwab <jschwab@gmail.com>
 - Julien Danjou <julien@danjou.info>
 - Justin Burkett <justin@burkett.cc>
@@ -178,8 +184,10 @@ Contributors
 - Kenny Ballou <kballou@devnulllabs.io>
 - Keshav Kini <keshav.kini@gmail.com>
 - Kevin Brubeck Unhammer <unhammer@fsfe.org>
+- Kevin J. Foley <kfoley15@gmail.com>
 - Kévin Le Gouguec <kevin.legouguec@gmail.com>
 - Kimberly Wolk <kimwolk@hotmail.com>
+- Knut Olav Bøhmer <bohmer@gmail.com>
 - Kyle Meyer <kyle@kyleam.com>
 - Laurent Laffont <laurent.laffont@gmail.com>
 - Laverne Schrock <laverne@schrock.email>
@@ -220,6 +228,7 @@ Contributors
 - Miloš Mošić <mosic.milos@gmail.com>
 - Mitchel Humpherys <mitch.special@gmail.com>
 - Moritz Bunkus <moritz@bunkus.org>
+- Naoya Yamashita <conao3@gmail.com>
 - Natalie Weizenbaum <nex342@gmail.com>
 - Nguyễn Tuấn Anh <ubolonton@gmail.com>
 - Nic Ferier <nic@ferrier.me.uk>
@@ -294,10 +303,12 @@ Contributors
 - Sylvain Rousseau <thisirs@gmail.com>
 - Syohei Yoshida <syohex@gmail.com>
 - Takafumi Arakaki <aka.tkf@gmail.com>
+- Tassilo Horn <tsdh@gnu.org>
 - Teemu Likonen <tlikonen@iki.fi>
 - Teruki Shigitani <teruki.shigitani@gmail.com>
 - Thierry Volpiatto <thierry.volpiatto@gmail.com>
 - Thomas A Caswell <tcaswell@gmail.com>
+- Thomas Fini Hansen <xen@xen.dk>
 - Thomas Frössman <thomasf@jossystem.se>
 - Thomas Jost <thomas.jost@gmail.com>
 - Thomas Riccardi <riccardi.thomas@gmail.com>
@@ -307,8 +318,11 @@ Contributors
 - Tim Wraight <tim@wraight.net>
 - Ting-Yu Lin <aethanyc@gmail.com>
 - Tom Feist <shabble@metavore.org>
+- Topi Miettinen <toiwoton@gmail.com>
+- Troy Hinckley <t.macman@gmail.com>
 - Tunc Uzlu <bb2020@users.noreply.github.com>
 - Vineet Naik <vineet@helpshift.com>
+- Vitaly Ostashov <hotosho@yandex-team.ru>
 - Vladimir Panteleev <git@thecybershadow.net>
 - Wei Huang <weih@opera.com>
 - Wilfred Hughes <me@wilfred.me.uk>
@@ -317,7 +331,11 @@ Contributors
 - Xavier Noria <fxn@hashref.com>
 - Xu Chunyang <mail@xuchunyang.me>
 - Yann Hodique <yann.hodique@gmail.com>
+- Ynilu <ynilu.chang@gmail.com>
 - York Zhao <gtdplatform@gmail.com>
 - Yuichi Higashi <aaa707b@gmail.com>
 - Yuri Khan <yurivkhan@gmail.com>
 - Zach Latta <zach@zachlatta.com>
+- zakora <zakora@users.noreply.github.com>
+- Zhu Zihao <all_but_last@163.com>
+- zilongshanren <guanghui8827@126.com>

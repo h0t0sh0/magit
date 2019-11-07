@@ -69,7 +69,7 @@
 If you have enabled `ivy-mode' or `helm-mode', then you don't
 have to customize this option; `magit-builtin-completing-read'
 will work just fine.  However, if you use Ido completion, then
-you do have to use `magit-ido-completion-read', because Ido is
+you do have to use `magit-ido-completing-read', because Ido is
 less well behaved than the former, more modern alternatives.
 
 If you would like to use Ivy or Helm completion with Magit but
@@ -101,7 +101,10 @@ alphabetical order, depending on your version of Ivy."
     (forge-edit-topic-title   nil t)
     (forge-edit-topic-state   nil t)
     (forge-edit-topic-labels  nil t)
+    (forge-edit-topic-marks   nil t)
     (forge-edit-topic-assignees nil t)
+    (forge-edit-topic-review-requests nil t)
+    (forge-pull-pullreq       nil t)
     (forge-visit-issue        nil t)
     (forge-visit-pullreq      nil t))
   "When not to offer alternatives and ask for confirmation.
@@ -425,6 +428,9 @@ to t, otherwise nil.
 If it does read a value in the minibuffer, then this function
 acts similarly to `completing-read', except for the following:
 
+- COLLECTION must be a list of choices.  A function is not
+  supported.
+
 - If REQUIRE-MATCH is nil and the user exits without a choice,
   then nil is returned instead of an empty string.
 
@@ -570,7 +576,8 @@ drop-in replacement for `completing-read', instead we use
 same name."
   (if (require 'ido-completing-read+ nil t)
       (ido-completing-read+ prompt choices predicate require-match
-                            initial-input hist def)
+                            initial-input hist
+                            (or def (and require-match (car choices))))
     (display-warning 'magit "ido-completing-read+ is not installed
 
 To use Ido completion with Magit you need to install the
@@ -738,10 +745,11 @@ See info node `(magit)Debugging Tools' for more information."
                          (cond
                           (path
                            (list (file-name-directory path)))
-                          (t
+                          ((not (equal lib "libgit"))
                            (error "Cannot find mandatory dependency %s" lib)))))
                      '(;; Like `LOAD_PATH' in `default.mk'.
                        "dash"
+                       "libgit"
                        "transient"
                        "with-editor"
                        ;; Obviously `magit' itself is needed too.
@@ -803,45 +811,58 @@ Unless optional argument KEEP-EMPTY-LINES is t, trim all empty lines."
 
 (defun magit-set-header-line-format (string)
   "Set the header-line using STRING.
-Propertize STRING with the `magit-header-line' face if no face is
-present, and pad the left and right sides of STRING equally such
-that it will align with the text area."
-  (let* ((header-line
-          (concat (propertize " "
-                              'display
-                              '(space :align-to 0))
-                  string
-                  (propertize
-                   " "
-                   'display
-                   `(space :width (+ left-fringe
-                                     left-margin
-                                     ,@(and (eq (car (window-current-scroll-bars))
-                                                'left)
-                                            '(scroll-bar)))))))
-         (len (length header-line)))
-    (setq header-line-format
-          (if (text-property-not-all 0 len 'face nil header-line)
-              (let ((face (get-text-property 0 'face string)))
-                (when (and (atom face)
-                           (magit-face-property-all face string))
-                  (add-face-text-property 0 1 face nil header-line)
-                  (add-face-text-property (1- len) len face nil header-line))
-                header-line)
-            (propertize header-line
-                        'face
-                        'magit-header-line)))))
+Propertize STRING with the `magit-header-line'.  If the `face'
+property of any part of STRING is already set, then that takes
+precedence.  Also pad the left and right sides of STRING so that
+it aligns with the text area."
+  (setq header-line-format
+        (concat
+         (propertize " " 'display '(space :align-to 0))
+         string
+         (propertize " " 'display
+                     `(space :width
+                             (+ left-fringe
+                                left-margin
+                                ,@(and (eq (car (window-current-scroll-bars))
+                                           'left)
+                                       '(scroll-bar)))))))
+  (magit--add-face-text-property 0 (1- (length header-line-format))
+                                 'magit-header-line t header-line-format))
 
 (defun magit-face-property-all (face string)
   "Return non-nil if FACE is present in all of STRING."
-  (cl-loop for pos = 0 then (next-single-property-change pos 'face string)
+  (cl-loop for pos = 0 then (next-single-property-change
+                             pos 'font-lock-face string)
            unless pos
              return t
-           for current = (get-text-property pos 'face string)
+           for current = (get-text-property pos 'font-lock-face string)
            unless (if (consp current)
                       (memq face current)
                     (eq face current))
              return nil))
+
+(defun magit--add-face-text-property (beg end face &optional append object)
+  "Like `add-face-text-property' but for `font-lock-face'."
+  (cl-loop for pos = (next-single-property-change
+                      beg 'font-lock-face object end)
+           for current = (get-text-property beg 'font-lock-face object)
+           for newface = (if (listp current)
+                             (if append
+                                 (append current (list face))
+                               (cons face current))
+                           (if append
+                               (list current face)
+                             (list face current)))
+           do (progn (put-text-property beg pos 'font-lock-face newface object)
+                     (setq beg pos))
+           while (< beg end)))
+
+(defun magit--propertize-face (string face)
+  (propertize string 'face face 'font-lock-face face))
+
+(defun magit--put-face (beg end face string)
+  (put-text-property beg end 'face face string)
+  (put-text-property beg end 'font-lock-face face string))
 
 (defun magit--format-spec (format specification)
   "Like `format-spec' but preserve text properties in SPECIFICATION."
@@ -1002,33 +1023,6 @@ setting `imenu--index-alist' to nil before calling that function."
   (setq imenu--index-alist nil)
   (which-function))
 
-;;; Kludges for Incompatible Modes
-
-(defvar whitespace-mode)
-
-(defun whitespace-dont-turn-on-in-magit-mode (fn)
-  "Prevent `whitespace-mode' from being turned on in Magit buffers.
-
-Because `whitespace-mode' uses font-lock and Magit does not, they
-are not compatible.  Therefore you cannot turn on that minor-mode
-in Magit buffers.  If you try to enable it anyway, then this
-advice prevents that.
-
-If the reason the attempt is made is that `global-whitespace-mode'
-is enabled, then that is done silently.  However if you call the local
-minor-mode interactively, then that results in an error.
-
-See `magit-diff-paint-whitespace' for an alternative."
-  (if (not (derived-mode-p 'magit-mode))
-      (funcall fn)
-    (setq whitespace-mode nil)
-    (when (eq this-command 'whitespace-mode)
-      (user-error
-       "Whitespace mode NOT enabled because it is not compatible with Magit"))))
-
-(advice-add 'whitespace-turn-on :around
-            'whitespace-dont-turn-on-in-magit-mode)
-
 ;;; Kludges for Custom
 
 (defun magit-custom-initialize-reset (symbol exp)
@@ -1079,20 +1073,19 @@ or (last of all) the value of EXP."
 
 ;;;###autoload
 (defun Info-follow-nearest-node--magit-gitman (fn &optional fork)
-  (if magit-view-git-manual-method
-      (let ((node (Info-get-token
-                   (point) "\\*note[ \n\t]+"
-                   "\\*note[ \n\t]+\\([^:]*\\):\\(:\\|[ \n\t]*(\\)?")))
-        (if (and node (string-match "^(gitman)\\(.+\\)" node))
-            (pcase magit-view-git-manual-method
-              (`man   (require 'man)
-                      (man (match-string 1 node)))
-              (`woman (require 'woman)
-                      (woman (match-string 1 node)))
-              (_
-               (user-error "Invalid value for `magit-view-git-manual-method'")))
-          (funcall fn fork)))
-    (funcall fn fork)))
+  (let ((node (Info-get-token
+               (point) "\\*note[ \n\t]+"
+               "\\*note[ \n\t]+\\([^:]*\\):\\(:\\|[ \n\t]*(\\)?")))
+    (if (and node (string-match "^(gitman)\\(.+\\)" node))
+        (pcase magit-view-git-manual-method
+          (`info  (funcall fn fork))
+          (`man   (require 'man)
+                  (man (match-string 1 node)))
+          (`woman (require 'woman)
+                  (woman (match-string 1 node)))
+          (_
+           (user-error "Invalid value for `magit-view-git-manual-method'")))
+      (funcall fn fork))))
 
 ;;;###autoload
 (advice-add 'Info-follow-nearest-node :around
@@ -1197,6 +1190,15 @@ FORMAT-STRING to be displayed, then don't."
 Like `message', except that `message-log-max' is bound to nil."
   (let ((message-log-max nil))
     (apply #'message format-string args)))
+
+(defmacro magit--with-temp-position (buf pos &rest body)
+  (declare (indent 2))
+  `(with-current-buffer ,buf
+     (save-excursion
+       (save-restriction
+         (widen)
+         (goto-char ,pos)
+         ,@body))))
 
 ;;; _
 (provide 'magit-utils)

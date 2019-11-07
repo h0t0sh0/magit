@@ -135,13 +135,14 @@ This discards all changes made since the sequence started."
   "Apply or transplant commits."
   :man-page "git-cherry-pick"
   :value '("--ff")
+  :incompatible '(("--ff" "-x"))
   ["Arguments"
    :if-not magit-sequencer-in-progress-p
-   ("-F" "Attempt fast-forward"               "--ff")
    (magit-cherry-pick:--mainline)
    ("=s" magit-merge:--strategy)
-   ("-e" "Edit commit messages"               ("-e" "--edit"))
+   ("-F" "Attempt fast-forward"               "--ff")
    ("-x" "Reference cherry in commit message" "-x")
+   ("-e" "Edit commit messages"               ("-e" "--edit"))
    ("-s" "Add Signed-off-by lines"            ("-s" "--signoff"))
    (5 magit:--gpg-sign)]
   [:if-not magit-sequencer-in-progress-p
@@ -544,36 +545,55 @@ This discards all changes made since the sequence started."
   (magit-run-git-sequencer "rebase" args target))
 
 ;;;###autoload (autoload 'magit-rebase-onto-pushremote "magit-sequence" nil t)
-(define-suffix-command magit-rebase-onto-pushremote (args &optional set)
+(define-suffix-command magit-rebase-onto-pushremote (args)
   "Rebase the current branch onto its push-remote branch.
 
-When `magit-remote-set-if-missing' is non-nil and
-the push-remote is not configured, then read the push-remote from
-the user, set it, and then rebase onto it.  With a prefix argument
-the push-remote can be changed before rebasing onto to it."
-  :if 'magit--pushbranch-suffix-predicate
-  :description 'magit--pushbranch-suffix-description
-  (interactive (list (magit-rebase-arguments)
-                     (magit--transfer-maybe-read-pushremote "rebase onto")))
-  (magit--transfer-pushremote set
-    (lambda (_ __ remote/branch)
-      (magit-git-rebase remote/branch args))))
+When the push-remote is not configured, then read the push-remote
+from the user, set it, and then rebase onto it.  With a prefix
+argument the push-remote can be changed before rebasing onto to
+it."
+  :if 'magit-get-current-branch
+  :description 'magit-pull--pushbranch-description
+  (interactive (list (magit-rebase-arguments)))
+  (pcase-let ((`(,branch ,remote)
+               (magit--select-push-remote "rebase onto that")))
+    (magit-git-rebase (concat remote "/" branch) args)))
 
 ;;;###autoload (autoload 'magit-rebase-onto-upstream "magit-sequence" nil t)
-(define-suffix-command magit-rebase-onto-upstream (args &optional set)
+(define-suffix-command magit-rebase-onto-upstream (args)
   "Rebase the current branch onto its upstream branch.
 
-When `magit-remote-set-if-missing' is non-nil and
-the upstream is not configured, then read the upstream from the
-user, set it, and then rebase onto it.  With a prefix argument
-the upstream can be changed before rebasing onto it."
-  :if 'magit--upstream-suffix-predicate
-  :description 'magit--upstream-suffix-description
-  (interactive (list (magit-rebase-arguments)
-                     (magit--transfer-maybe-read-upstream "rebase onto")))
-  (magit--transfer-upstream set
-    (lambda (_ upstream)
-      (magit-git-rebase upstream args))))
+With a prefix argument or when the upstream is either not
+configured or unusable, then let the user first configure
+the upstream."
+  :if 'magit-get-current-branch
+  :description 'magit-rebase--upstream-description
+  (interactive (list (magit-rebase-arguments)))
+  (let* ((branch (or (magit-get-current-branch)
+                     (user-error "No branch is checked out")))
+         (upstream (magit-get-upstream-branch branch)))
+    (when (or current-prefix-arg (not upstream))
+      (setq upstream
+            (magit-read-upstream-branch
+             branch (format "Set upstream of %s and rebase onto that" branch)))
+      (magit-set-upstream-branch branch upstream))
+    (magit-git-rebase upstream args)))
+
+(defun magit-rebase--upstream-description ()
+  (when-let ((branch (magit-get-current-branch)))
+    (or (magit-get-upstream-branch branch)
+        (let ((remote (magit-get "branch" branch "remote"))
+              (merge  (magit-get "branch" branch "merge"))
+              (u (magit--propertize-face "@{upstream}" 'bold)))
+          (cond
+           ((magit--unnamed-upstream-p remote merge)
+            (concat u ", replacing unnamed"))
+           ((magit--valid-upstream-p remote merge)
+            (concat u ", replacing non-existent"))
+           ((or remote merge)
+            (concat u ", replacing invalid"))
+           (t
+            (concat u ", setting that")))))))
 
 ;;;###autoload
 (defun magit-rebase-branch (target args)
@@ -811,8 +831,8 @@ If no such sequence is in progress, do nothing."
                    "^\\(pick\\|revert\\) \\([^ ]+\\) \\(.*\\)$" line)
               (magit-bind-match-strings (cmd hash msg) line
                 (magit-insert-section (commit hash)
-                  (insert (propertize cmd 'face 'magit-sequence-pick)
-                          " " (propertize hash 'face 'magit-hash)
+                  (insert (propertize cmd 'font-lock-face 'magit-sequence-pick)
+                          " " (propertize hash 'font-lock-face 'magit-hash)
                           " " msg "\n"))))))
         (magit-sequence-insert-sequence
          (magit-file-line (magit-git-dir (if picking
@@ -855,8 +875,9 @@ If no such sequence is in progress, do nothing."
              (unless (re-search-forward "^Subject: " nil t)
                (goto-char (point-min)))
              (buffer-substring (point) (line-end-position)))))
-      (insert (propertize type 'face face)
-              ?\s (propertize (file-name-nondirectory patch) 'face 'magit-hash)
+      (insert (propertize type 'font-lock-face face)
+              ?\s (propertize (file-name-nondirectory patch)
+                              'font-lock-face 'magit-hash)
               ?\s title
               ?\n))))
 
@@ -901,14 +922,14 @@ status buffer (i.e. the reverse of how they will be applied)."
          (magit-sequence-insert-commit action target 'magit-sequence-pick))
         ((or (or `exec `label)
              (and `merge (guard (not action-options))))
-         (insert (propertize action 'face 'magit-sequence-onto) "\s"
-                 (propertize target 'face 'git-rebase-label) "\n"))
+         (insert (propertize action 'font-lock-face 'magit-sequence-onto) "\s"
+                 (propertize target 'font-lock-face 'git-rebase-label) "\n"))
         (`merge
          (if-let ((hash (and (string-match "-[cC] \\([^ ]+\\)" action-options)
                              (match-string 1 action-options))))
              (magit-insert-section (commit hash)
                (magit-insert-heading
-                 (propertize "merge" 'face 'magit-sequence-pick)
+                 (propertize "merge" 'font-lock-face 'magit-sequence-pick)
                  "\s"
                  (magit-format-rev-summary hash) "\n"))
            (error "failed to parse merge message hash"))))))
@@ -1000,7 +1021,7 @@ status buffer (i.e. the reverse of how they will be applied)."
 (defun magit-sequence-insert-commit (type hash face)
  (magit-insert-section (commit hash)
     (magit-insert-heading
-      (propertize type 'face face)    "\s"
+      (propertize type 'font-lock-face face)    "\s"
       (magit-format-rev-summary hash) "\n")))
 
 ;;; _

@@ -161,30 +161,64 @@ so causes the change to be applied to the index as well."
                      (concat (magit-diff-file-header section)
                              (magit-apply--section-content section))))
 
+(defun magit-apply--adjust-hunk-new-starts (hunks)
+  "Adjust new line numbers in headers of HUNKS for partial application.
+HUNKS should be a list of ordered, contiguous hunks to be applied
+from a file.  For example, if there is a sequence of hunks with
+the headers
+
+  @@ -2,6 +2,7 @@
+  @@ -10,6 +11,7 @@
+  @@ -18,6 +20,7 @@
+
+and only the second and third are to be applied, they would be
+adjusted as \"@@ -10,6 +10,7 @@\" and \"@@ -18,6 +19,7 @@\"."
+  (let* ((first-hunk (car hunks))
+         (offset (if (string-match diff-hunk-header-re-unified first-hunk)
+                     (- (string-to-number (match-string 3 first-hunk))
+                        (string-to-number (match-string 1 first-hunk)))
+                   (error "Hunk does not have expected header"))))
+    (if (= offset 0)
+        hunks
+      (mapcar (lambda (hunk)
+                (if (string-match diff-hunk-header-re-unified hunk)
+                    (replace-match (number-to-string
+                                    (- (string-to-number (match-string 3 hunk))
+                                       offset))
+                                   t t hunk 3)
+                  (error "Hunk does not have expected header")))
+              hunks))))
+
+(defun magit-apply--adjust-hunk-new-start (hunk)
+  (car (magit-apply--adjust-hunk-new-starts (list hunk))))
+
 (defun magit-apply-hunks (sections &rest args)
   (let ((section (oref (car sections) parent)))
     (when (string-match "^diff --cc" (oref section value))
       (user-error "Cannot un-/stage resolution hunks.  Stage the whole file"))
-    (magit-apply-patch section args
-                       (concat (oref section header)
-                               (mapconcat 'magit-apply--section-content
-                                          sections "")))))
+    (magit-apply-patch
+     section args
+     (concat (oref section header)
+             (mapconcat #'identity
+                        (magit-apply--adjust-hunk-new-starts
+                         (mapcar #'magit-apply--section-content sections))
+                        "")))))
 
 (defun magit-apply-hunk (section &rest args)
   (when (string-match "^diff --cc" (magit-section-parent-value section))
     (user-error "Cannot un-/stage resolution hunks.  Stage the whole file"))
   (magit-apply-patch (oref section parent) args
                      (concat (magit-diff-file-header section)
-                             (magit-apply--section-content section))))
+                             (magit-apply--adjust-hunk-new-start
+                              (magit-apply--section-content section)))))
 
 (defun magit-apply-region (section &rest args)
-  (unless (magit-diff-context-p)
-    (user-error "Not enough context to apply region.  Increase the context"))
   (when (string-match "^diff --cc" (magit-section-parent-value section))
     (user-error "Cannot un-/stage resolution hunks.  Stage the whole file"))
   (magit-apply-patch (oref section parent) args
                      (concat (magit-diff-file-header section)
-                             (magit-diff-hunk-region-patch section args))))
+                             (magit-apply--adjust-hunk-new-start
+                              (magit-diff-hunk-region-patch section args)))))
 
 (defun magit-apply-patch (section:s args patch)
   (let* ((files (if (atom section:s)
@@ -194,15 +228,15 @@ so causes the change to be applied to the index as well."
          (command (if (and command (string-match "^magit-\\([^-]+\\)" command))
                       (match-string 1 command)
                     "apply"))
-         (no-context (not (magit-diff-context-p)))
          (ignore-context (magit-diff-ignore-any-space-p)))
+    (unless (magit-diff-context-p)
+      (user-error "Not enough context to apply patch.  Increase the context"))
     (when (and magit-wip-before-change-mode (not inhibit-magit-refresh))
       (magit-wip-commit-before-change files (concat " before " command)))
     (with-temp-buffer
       (insert patch)
       (magit-run-git-with-input
        "apply" args "-p0"
-       (and no-context "--unidiff-zero")
        (and ignore-context "-C0")
        "--ignore-space-change" "-"))
     (unless inhibit-magit-refresh
@@ -231,9 +265,7 @@ so causes the change to be applied to the index as well."
     (t sections)))
 
 (defun magit-apply--diff-ignores-whitespace-p ()
-  (and (cl-intersection (if (derived-mode-p 'magit-diff-mode)
-                            (nth 2 magit-refresh-args)
-                          magit-diff-section-arguments)
+  (and (cl-intersection magit-buffer-diff-args
                         '("--ignore-space-at-eol"
                           "--ignore-space-change"
                           "--ignore-all-space"
@@ -297,7 +329,7 @@ ignored) files."
   (when (magit-anything-staged-p)
     (magit-confirm 'stage-all-changes))
   (magit-with-toplevel
-    (magit-stage-1 (if all "--all" "-u") magit-diff-section-file-args)))
+    (magit-stage-1 (if all "--all" "-u") magit-buffer-diff-files)))
 
 (defun magit-stage-1 (arg &optional files)
   (magit-wip-commit-before-change files " before stage")
@@ -420,7 +452,7 @@ without requiring confirmation."
             (magit-untracked-files))
     (magit-confirm 'unstage-all-changes))
   (magit-wip-commit-before-change nil " before unstage")
-  (magit-run-git "reset" "HEAD" "--" magit-diff-section-file-args)
+  (magit-run-git "reset" "HEAD" "--" magit-buffer-diff-files)
   (magit-wip-commit-after-apply nil " after unstage"))
 
 ;;;; Discard
@@ -662,10 +694,9 @@ so causes the change to be applied to the index as well."
   (pcase-let ((`(,binaries ,sections)
                (let ((bs (magit-binary-files
                           (cond ((derived-mode-p 'magit-revision-mode)
-                                 (let ((rev (car magit-refresh-args)))
-                                   (format "%s^..%s" rev rev)))
+                                 magit-buffer-range)
                                 ((derived-mode-p 'magit-diff-mode)
-                                 (car magit-refresh-args))
+                                 magit-buffer-range)
                                 (t
                                  "--cached")))))
                  (--separate (member (oref it value) bs)

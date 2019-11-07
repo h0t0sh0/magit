@@ -39,7 +39,7 @@
    ("h" "hard     (HEAD, index and files)" magit-reset-hard)
    ("i" "index    (only)"                  magit-reset-index)
    ("w" "worktree (only)"                  magit-reset-worktree)
-   ?\n
+   ""
    ("f" "a file"                           magit-file-checkout)])
 
 ;;;###autoload
@@ -61,7 +61,7 @@
   "Reset the `HEAD', index, and working tree to COMMIT.
 \n(git reset --hard REVISION)"
   (interactive (list (magit-reset-read-branch-or-commit
-                      (concat (propertize "Hard" 'face 'bold)
+                      (concat (magit--propertize-face "Hard" 'bold)
                               " reset %s to"))))
   (magit-reset-internal "--hard" commit))
 
@@ -92,7 +92,7 @@ With a prefix argument reset the working tree otherwise don't.
 \n(git reset --mixed|--hard COMMIT)"
   (interactive (list (magit-reset-read-branch-or-commit
                       (if current-prefix-arg
-                          (concat (propertize "Hard" 'face 'bold)
+                          (concat (magit--propertize-face "Hard" 'bold)
                                   " reset %s to")
                         "Reset %s to"))
                      current-prefix-arg))

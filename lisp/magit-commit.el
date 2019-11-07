@@ -42,8 +42,9 @@
   "Whether to ask to stage all unstaged changes when committing and nothing is staged."
   :package-version '(magit . "2.3.0")
   :group 'magit-commands
-  :type '(choice (const :tag "Ask showing diff" verbose)
-                 (const :tag "Ask" t)
+  :type '(choice (const :tag "Ask" t)
+                 (const :tag "Ask showing diff" verbose)
+                 (const :tag "Stage without confirmation" stage)
                  (const :tag "Don't ask" nil)))
 
 (defcustom magit-commit-show-diff t
@@ -147,20 +148,23 @@ Also see `git-commit-post-finish-hook'."
 
 (defvar magit-gpg-secret-key-hist nil)
 
-(defun magit-read-gpg-secret-key (prompt &optional _initial-input history)
+(defun magit-read-gpg-secret-key (prompt &optional initial-input history)
   (require 'epa)
-  (let ((keys (--map (concat (epg-sub-key-id (car (epg-key-sub-key-list it)))
-                             " "
-                             (when-let ((id-obj (car (epg-key-user-id-list it))))
-                               (let ((id-str (epg-user-id-string id-obj)))
-                                 (if (stringp id-str)
-                                     id-str
-                                   (epg-decode-dn id-obj)))))
-                     (epg-list-keys (epg-make-context epa-protocol) nil t))))
-    (car (split-string (magit-completing-read
-                        prompt keys nil nil nil history
-                        (car (or history keys)))
-                       " "))))
+  (let* ((keys (mapcar
+                (lambda (obj)
+                  (let ((key (epg-sub-key-id (car (epg-key-sub-key-list obj))))
+                        (author
+                         (when-let ((id-obj (car (epg-key-user-id-list obj))))
+                           (let ((id-str (epg-user-id-string id-obj)))
+                             (if (stringp id-str)
+                                 id-str
+                               (epg-decode-dn id-obj))))))
+                    (propertize key 'display (concat key " " author))))
+                (epg-list-keys (epg-make-context epa-protocol) nil t)))
+         (choice (completing-read prompt keys nil nil nil
+                                  history nil initial-input)))
+    (set-text-properties 0 (length choice) nil choice)
+    choice))
 
 (define-infix-argument magit-commit:--reuse-message ()
   :description "Reuse commit message"
@@ -369,7 +373,8 @@ depending on the value of option `magit-commit-squash-confirm'."
    (magit-commit-ask-to-stage
     (when (eq magit-commit-ask-to-stage 'verbose)
       (magit-diff-unstaged))
-    (prog1 (when (y-or-n-p "Nothing staged.  Stage and commit all unstaged changes? ")
+    (prog1 (when (or (eq magit-commit-ask-to-stage 'stage)
+                     (y-or-n-p "Nothing staged.  Stage and commit all unstaged changes? "))
              (magit-run-git "add" "-u" ".")
              (or args (list "--")))
       (when (and (eq magit-commit-ask-to-stage 'verbose)
@@ -458,7 +463,7 @@ is available from https://github.com/torbiak/git-autofixup."
 
 (defun magit-commit-diff ()
   (when (and git-commit-mode magit-commit-show-diff)
-    (when-let ((diff-buffer (magit-mode-get-buffer 'magit-diff-mode)))
+    (when-let ((diff-buffer (magit-get-mode-buffer 'magit-diff-mode)))
       ;; This window just started displaying the commit message
       ;; buffer.  Without this that buffer would immediately be
       ;; replaced with the diff buffer.  See #2632.
@@ -469,19 +474,18 @@ is available from https://github.com/torbiak/git-autofixup."
               (magit-display-buffer-noselect t)
               (inhibit-quit nil))
           (message "Diffing changes to be committed (C-g to abort diffing)")
-          (if-let ((fn (cl-case last-command
-                         (magit-commit
-                          (apply-partially 'magit-diff-staged nil))
-                         (magit-commit-all
-                          (apply-partially 'magit-diff-working-tree nil))
-                         ((magit-commit-amend
-                           magit-commit-reword
-                           magit-rebase-reword-commit)
-                          'magit-diff-while-amending))))
-              (funcall fn args)
-            (if (magit-anything-staged-p)
-                (magit-diff-staged nil args)
-              (magit-diff-while-amending args))))
+          (cl-case last-command
+            (magit-commit
+             (magit-diff-staged nil args))
+            (magit-commit-all
+             (magit-diff-working-tree nil args))
+            ((magit-commit-amend
+              magit-commit-reword
+              magit-rebase-reword-commit)
+             (magit-diff-while-amending args))
+            (t (if (magit-anything-staged-p)
+                   (magit-diff-staged nil args)
+                 (magit-diff-while-amending args)))))
       (quit))))
 
 ;; Mention `magit-diff-while-committing' because that's
@@ -510,25 +514,20 @@ If no commit is in progress, then initiate it.  Use the function
 specified by variable `magit-commit-add-log-insert-function' to
 actually insert the entry."
   (interactive)
-  (let ((hunk (and (magit-section-match 'hunk)
-                   (magit-current-section)))
-        (log  (magit-commit-message-buffer)) buf pos)
-    (save-window-excursion
-      (call-interactively #'magit-diff-visit-file)
-      (setq buf (current-buffer))
-      (setq pos (point)))
+  (pcase-let* ((hunk (and (magit-section-match 'hunk)
+                          (magit-current-section)))
+               (log  (magit-commit-message-buffer))
+               (`(,buf ,pos) (magit-diff-visit-file--noselect)))
     (unless log
       (unless (magit-commit-assert nil)
         (user-error "Abort"))
       (magit-commit-create)
       (while (not (setq log (magit-commit-message-buffer)))
         (sit-for 0.01)))
-    (save-excursion
-      (with-current-buffer buf
-        (goto-char pos)
-        (funcall magit-commit-add-log-insert-function log
-                 (magit-file-relative-name)
-                 (and hunk (add-log-current-defun)))))))
+    (magit--with-temp-position buf pos
+      (funcall magit-commit-add-log-insert-function log
+               (magit-file-relative-name)
+               (and hunk (add-log-current-defun))))))
 
 (defun magit-commit-add-log-insert (buffer file defun)
   (with-current-buffer buffer

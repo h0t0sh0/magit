@@ -81,7 +81,10 @@
 (require 'magit)
 
 (and (require 'async-bytecomp nil t)
-     (memq 'magit (bound-and-true-p async-bytecomp-allowed-packages))
+     (let ((pkgs (bound-and-true-p async-bytecomp-allowed-packages)))
+       (if (consp pkgs)
+           (cl-intersection '(all magit) pkgs)
+         (memq pkgs '(all t))))
      (fboundp 'async-bytecomp-package-mode)
      (async-bytecomp-package-mode 1))
 
@@ -630,7 +633,8 @@ Like `undo' but works in read-only buffers."
           (pcase scroll
             (`up   (magit-diff-show-or-scroll-up))
             (`down (magit-diff-show-or-scroll-down))
-            (_     (apply #'magit-show-commit it (magit-diff-arguments))))
+            (_     (apply #'magit-show-commit it
+                          (magit-diff-arguments 'magit-revision-mode))))
         (ding)))))
 
 (defun git-rebase-show-commit ()
@@ -743,6 +747,8 @@ running 'man git-rebase' at the command line) for details."
     (git-rebase-match-comment-line 0 'font-lock-comment-face)
     ("\\[[^[]*\\]"
      0 'magit-keyword t)
+    ("\\(?:fixup!\\|squash!\\)"
+     0 'magit-keyword-squash t)
     (,(format "^%s Rebase \\([^ ]*\\) onto \\([^ ]*\\)" comment-start)
      (1 'git-rebase-comment-hash t)
      (2 'git-rebase-comment-hash t))
@@ -781,7 +787,8 @@ By default, this is the same except for the \"pick\" command."
                (format "%-8s"
                        (mapconcat #'key-description
                                   (--remove (eq (elt it 0) 'menu-bar)
-                                            (reverse (where-is-internal cmd)))
+                                            (reverse (where-is-internal
+                                                      cmd git-rebase-mode-map)))
                                   ", "))
                t t nil 2))))))))
 
